@@ -1,0 +1,7 @@
+.vs/
+bin/
+obj/
+*.suo
+asm-unity-addon/.vs/
+asm-unity-addon/bin/
+asm-unity-addon/obj/
