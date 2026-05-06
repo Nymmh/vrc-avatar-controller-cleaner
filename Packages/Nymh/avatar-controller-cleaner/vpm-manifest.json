@@ -1,0 +1,14 @@
+{
+  "name": "com.nymh.avatar-controller-cleaner",
+  "version": "1.0.0",
+  "vpmDependencies": {},
+  "unity": "2022.3",
+  "displayName": "Avatar Controller Cleaner",
+  "description": "Remove unused parameters as well as dead code that exists in your avatars FX Controller.",
+  "vrchatVersion": "2022.1.1",
+  "author": {
+    "name": "Nymh",
+    "email": "nymhavis@gmail.com",
+    "url": "https://github.com/Nymmh/vrc-avatar-controller-cleaner"
+  }
+}
