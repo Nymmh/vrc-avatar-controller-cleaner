@@ -141,6 +141,55 @@ namespace vrc_avatar_controller_cleaner
             return changed;
         }
 
+        private static long GetInternalFileId(SerializedProperty prop)
+        {
+            if (prop == null)
+            {
+                return 0;
+            }
+
+            var fileIdProp = prop.FindPropertyRelative("m_FileID") ?? prop.FindPropertyRelative("fileID");
+            if (fileIdProp != null && fileIdProp.propertyType == SerializedPropertyType.Integer)
+            {
+                return fileIdProp.longValue;
+            }
+
+            return 0;
+        }
+
+        private static bool CleanBrokenRefs(
+            AnimatorTransitionBase t,
+            HashSet<long> stateIds,
+            HashSet<long> smIds)
+        {
+            var so = new SerializedObject(t);
+            bool changed = false;
+
+            var dstState = so.FindProperty("m_DstState");
+            var dstId = GetInternalFileId(dstState);
+            if (dstId != 0 && !stateIds.Contains(dstId))
+            {
+                dstState.objectReferenceValue = null;
+                changed = true;
+            }
+
+            var dstSmProp = so.FindProperty("m_DstStateMachine");
+            var dstSmId = GetInternalFileId(dstSmProp);
+            if (dstSmId != 0 && !smIds.Contains(dstSmId))
+            {
+                dstSmProp.objectReferenceValue = null;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(t);
+            }
+
+            return changed;
+        }
+
         private static void CleanGhostRefsFromDriver(VRCAvatarParameterDriver driver, HashSet<string> ghostParams)
         {
             var before = driver.parameters.Count;
@@ -151,16 +200,22 @@ namespace vrc_avatar_controller_cleaner
             }
         }
 
-        private static void CleanGhostRefsFromStateMachine(AnimatorStateMachine sm, HashSet<string> ghostParams)
+        private static void CleanGhostRefsFromStateMachine(
+            AnimatorStateMachine sm,
+            HashSet<string> ghostParams,
+            HashSet<long> sIds,
+            HashSet<long> smIds)
         {
             foreach (var t in sm.anyStateTransitions)
             {
                 CleanConditionsOnTransition(t, ghostParams);
+                CleanBrokenRefs(t, sIds, smIds);
             }
 
             foreach (var t in sm.entryTransitions)
             {
                 CleanConditionsOnTransition(t, ghostParams);
+                CleanBrokenRefs(t, sIds, smIds);
             }
 
             foreach (var si in sm.states)
@@ -171,6 +226,7 @@ namespace vrc_avatar_controller_cleaner
                 foreach (var t in state.transitions)
                 {
                     CleanConditionsOnTransition(t, ghostParams);
+                    CleanBrokenRefs(t, sIds, smIds);
                 }
 
                 foreach (var b in state.behaviours)
@@ -191,12 +247,46 @@ namespace vrc_avatar_controller_cleaner
             {
                 if (c.stateMachine != null)
                 {
-                    CleanGhostRefsFromStateMachine(c.stateMachine, ghostParams);
+                    CleanGhostRefsFromStateMachine(c.stateMachine, ghostParams, sIds, smIds);
                 }
             }
         }
 
-        private static void CleanAllSubAssets(string assetPath, HashSet<string> ghostParams)
+        private static void GetDestIds(
+            string assetPath,
+            out HashSet<long> sIds,
+            out HashSet<long> smIds)
+        {
+            sIds = new HashSet<long>();
+            smIds = new HashSet<long>();
+
+            var subAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            foreach (var obj in subAssets)
+            {
+                if (obj == null) continue;
+
+                // Chud code
+                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(obj, out _, out long localId) || localId == 0)
+                {
+                    continue;
+                }
+
+                if (obj is AnimatorState)
+                {
+                    sIds.Add(localId);
+                }
+                else if (obj is AnimatorStateMachine)
+                {
+                    smIds.Add(localId);
+                }
+            }
+        }
+
+        private static void CleanAllSubAssets(
+            string assetPath,
+            HashSet<string> ghostParams,
+            HashSet<long> sIds,
+            HashSet<long> smIds)
         {
             var subAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
             foreach (var obj in subAssets)
@@ -210,6 +300,7 @@ namespace vrc_avatar_controller_cleaner
                 else if (obj is AnimatorTransitionBase tr)
                 {
                     CleanConditionsOnTransition(tr, ghostParams);
+                    CleanBrokenRefs(tr, sIds, smIds);
                 }
                 else if (obj is VRCAvatarParameterDriver drv)
                 {
@@ -367,7 +458,7 @@ namespace vrc_avatar_controller_cleaner
             AssetDatabase.ImportAsset(outputAsset);
             var copy = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(outputAsset);
 
-            if(copy == null)
+            if (copy == null)
             {
                 AssetDatabase.DeleteAsset(outputAsset);
                 return Fail("Could not load the copied controller");
@@ -387,6 +478,7 @@ namespace vrc_avatar_controller_cleaner
                 {
                     foreach (var g in GestureWeightParams) usedParams.Add(g);
                 }
+
                 foreach (var p in allParams)
                 {
                     if (usedParams.Contains(p.name))
@@ -407,7 +499,36 @@ namespace vrc_avatar_controller_cleaner
                 ghostParamList = ghostParams.OrderBy(p => p).ToList();
             }
 
-            bool anythingChanged = removedNames.Count > 0 || ghostParamList.Count > 0;
+            HashSet<long> sIds = null;
+            HashSet<long> smIds = null;
+            if (removeDeadCode)
+            {
+                GetDestIds(outputAsset, out sIds, out smIds);
+            }
+
+            bool hasBrokenRef = false;
+            if (removeDeadCode)
+            {
+                var subAssets = AssetDatabase.LoadAllAssetsAtPath(outputAsset);
+                foreach (var obj in subAssets)
+                {
+                    if (obj is AnimatorTransitionBase tr)
+                    {
+                        var so = new SerializedObject(tr);
+                        var dstStateFileId = GetInternalFileId(so.FindProperty("m_DstState"));
+                        var dstStateMachineFileId = GetInternalFileId(so.FindProperty("m_DstStateMachine"));
+
+                        if ((dstStateFileId != 0 && !sIds.Contains(dstStateFileId)) ||
+                            (dstStateMachineFileId != 0 && !smIds.Contains(dstStateMachineFileId)))
+                        {
+                            hasBrokenRef = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            bool anythingChanged = removedNames.Count > 0 || ghostParamList.Count > 0 || hasBrokenRef;
 
             if (!anythingChanged)
             {
@@ -430,11 +551,23 @@ namespace vrc_avatar_controller_cleaner
                 {
                     if (l.stateMachine != null)
                     {
-                        CleanGhostRefsFromStateMachine(l.stateMachine, ghostParams);
+                        CleanGhostRefsFromStateMachine(l.stateMachine, ghostParams, sIds, smIds);
                     }
                 }
 
-                CleanAllSubAssets(outputAsset, ghostParams);
+                CleanAllSubAssets(outputAsset, ghostParams, sIds, smIds);
+            }
+            else if (removeDeadCode && hasBrokenRef)
+            {
+                foreach (var l in copy.layers)
+                {
+                    if (l.stateMachine != null)
+                    {
+                        CleanGhostRefsFromStateMachine(l.stateMachine, new HashSet<string>(), sIds, smIds);
+                    }
+                }
+
+                CleanAllSubAssets(outputAsset, new HashSet<string>(), sIds, smIds);
             }
 
             EditorUtility.SetDirty(copy);
