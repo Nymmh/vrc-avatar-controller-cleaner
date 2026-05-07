@@ -164,21 +164,27 @@ namespace vrc_avatar_controller_cleaner
         {
             var so = new SerializedObject(t);
             bool changed = false;
-
+            // stupid dstState is so dumb
             var dstState = so.FindProperty("m_DstState");
-            var dstId = GetInternalFileId(dstState);
-            if (dstId != 0 && !stateIds.Contains(dstId))
+            if (dstState != null && dstState.objectReferenceValue == null)
             {
-                dstState.objectReferenceValue = null;
-                changed = true;
+                var dstId = GetInternalFileId(dstState);
+                if (dstId != 0 && !stateIds.Contains(dstId))
+                {
+                    dstState.objectReferenceValue = null;
+                    changed = true;
+                }
             }
 
             var dstSmProp = so.FindProperty("m_DstStateMachine");
-            var dstSmId = GetInternalFileId(dstSmProp);
-            if (dstSmId != 0 && !smIds.Contains(dstSmId))
+            if (dstSmProp != null && dstSmProp.objectReferenceValue == null)
             {
-                dstSmProp.objectReferenceValue = null;
-                changed = true;
+                var dstSmId = GetInternalFileId(dstSmProp);
+                if (dstSmId != 0 && !smIds.Contains(dstSmId))
+                {
+                    dstSmProp.objectReferenceValue = null;
+                    changed = true;
+                }
             }
 
             if (changed)
@@ -515,14 +521,28 @@ namespace vrc_avatar_controller_cleaner
                     if (obj is AnimatorTransitionBase tr)
                     {
                         var so = new SerializedObject(tr);
-                        var dstStateFileId = GetInternalFileId(so.FindProperty("m_DstState"));
-                        var dstStateMachineFileId = GetInternalFileId(so.FindProperty("m_DstStateMachine"));
-
-                        if ((dstStateFileId != 0 && !sIds.Contains(dstStateFileId)) ||
-                            (dstStateMachineFileId != 0 && !smIds.Contains(dstStateMachineFileId)))
+                        // dstState is spooky
+                        // before was going too deep and it exploded
+                        var dstStateProp = so.FindProperty("m_DstState");
+                        if (dstStateProp != null && dstStateProp.objectReferenceValue == null)
                         {
-                            hasBrokenRef = true;
-                            break;
+                            var dstStateFileId = GetInternalFileId(dstStateProp);
+                            if (dstStateFileId != 0 && !sIds.Contains(dstStateFileId))
+                            {
+                                hasBrokenRef = true;
+                                break;
+                            }
+                        }
+
+                        var dstSmProp = so.FindProperty("m_DstStateMachine");
+                        if (dstSmProp != null && dstSmProp.objectReferenceValue == null)
+                        {
+                            var dstSmFileId = GetInternalFileId(dstSmProp);
+                            if (dstSmFileId != 0 && !smIds.Contains(dstSmFileId))
+                            {
+                                hasBrokenRef = true;
+                                break;
+                            }
                         }
                     }
                 }

@@ -166,7 +166,7 @@ namespace vrc_avatar_controller_cleaner
             GUI.Label(footerRect, footerCenter, footerCenterStyle);
 
             var copyButtonRect = new Rect(footerRect.xMax - 130f, footerRect.y, 130f, footerRect.height);
-            if (GUI.Button(copyButtonRect, "Copy github link"))
+            if (GUI.Button(copyButtonRect, "Copy Github Link"))
             {
                 EditorGUIUtility.systemCopyBuffer = githubLink;
             }
