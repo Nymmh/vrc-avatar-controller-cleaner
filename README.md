@@ -1,4 +1,6 @@
 # vrc-avatar-controller-cleaner
+[![Discord](https://img.shields.io/discord/1351240463096615042?style=for-the-badge&logo=discord&logoColor=white&label=Discord&labelColor=%235865F2&color=%23323232)](https://discord.gg/rcCCkbDsY3)
+[![VirusTotal](https://img.shields.io/badge/-VirusTotal-394EFF?style=for-the-badge&logo=virustotal&link=https%3A%2F%2Fwww.virustotal.com%2Fgui%2Ffile%2F7d7cc304ea77622f58b36d308d5904585e04141a97b0b231e402308aaa1234ce)](https://www.virustotal.com/gui/file/7d7cc304ea77622f58b36d308d5904585e04141a97b0b231e402308aaa1234ce)
 
 A Unity tool that can remove unused parameters as well as dead code that exists in your avatars FX Controller, generating a new cleaned FX controller for you and leaving the original FX controller untouched
 
