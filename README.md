@@ -118,7 +118,7 @@ It is saved in the same folder as the original FX controller
 
 ### What happens if a cleaned controller already exists?
 
-The existing cleaned controller will be replaced
+It will generate another `.Cleaned.controller` file, keeping your original
 
 ### Why is the Clean button disabled?
 
