@@ -354,6 +354,12 @@ namespace vrc_avatar_controller_cleaner
                     }
                 }
 
+                // hi <3
+                if (state.timeParameterActive && !string.IsNullOrEmpty(state.timeParameter))
+                {
+                    names.Add(state.timeParameter);
+                }
+
                 if (state.motion is UnityEditor.Animations.BlendTree bt)
                 {
                     GetFromBlendTree(bt, names);
