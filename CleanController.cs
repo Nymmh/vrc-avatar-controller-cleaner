@@ -63,6 +63,61 @@ namespace vrc_avatar_controller_cleaner
             }
         }
 
+        private static void GetFromState(AnimatorState state, HashSet<string> names)
+        {
+            if (state == null) return;
+
+            if (state.speedParameterActive && !string.IsNullOrEmpty(state.speedParameter))
+            {
+                names.Add(state.speedParameter);
+            }
+
+            if (state.mirrorParameterActive && !string.IsNullOrEmpty(state.mirrorParameter))
+            {
+                names.Add(state.mirrorParameter);
+            }
+
+            // hi <3
+            if (state.timeParameterActive && !string.IsNullOrEmpty(state.timeParameter))
+            {
+                names.Add(state.timeParameter);
+            }
+
+            if (state.cycleOffsetParameterActive && !string.IsNullOrEmpty(state.cycleOffsetParameter))
+            {
+                names.Add(state.cycleOffsetParameter);
+            }
+
+            if (state.motion is UnityEditor.Animations.BlendTree bt)
+            {
+                GetFromBlendTree(bt, names);
+            }
+
+            foreach (var t in state.transitions)
+            {
+                GetFromConditions(t.conditions, names);
+            }
+
+            foreach (var b in state.behaviours)
+            {
+                if (b is VRCAvatarParameterDriver driver)
+                {
+                    foreach (var p in driver.parameters)
+                    {
+                        if (!string.IsNullOrEmpty(p.name))
+                        {
+                            names.Add(p.name);
+                        }
+
+                        if (!string.IsNullOrEmpty(p.source))
+                        {
+                            names.Add(p.source);
+                        }
+                    }
+                }
+            }
+        }
+
         // Actually a pain in the ass
         private static void CleanGhostRefsFromBlendTree(UnityEditor.Animations.BlendTree bt, HashSet<string> ghostParams)
         {
@@ -331,39 +386,7 @@ namespace vrc_avatar_controller_cleaner
                 var state = si.state;
                 if (state == null) continue;
 
-                foreach (var t in state.transitions)
-                {
-                    GetFromConditions(t.conditions, names);
-                }
-
-                foreach (var b in state.behaviours)
-                {
-                    if (b is VRCAvatarParameterDriver driver)
-                    {
-                        foreach (var p in driver.parameters)
-                        {
-                            if (!string.IsNullOrEmpty(p.name)){
-                                names.Add(p.name);
-                            }
-
-                            if (!string.IsNullOrEmpty(p.source))
-                            {
-                                names.Add(p.source);
-                            }
-                        }
-                    }
-                }
-
-                // hi <3
-                if (state.timeParameterActive && !string.IsNullOrEmpty(state.timeParameter))
-                {
-                    names.Add(state.timeParameter);
-                }
-
-                if (state.motion is UnityEditor.Animations.BlendTree bt)
-                {
-                    GetFromBlendTree(bt, names);
-                }
+                GetFromState(state, names);
             }
 
             foreach (var c in sm.stateMachines)
