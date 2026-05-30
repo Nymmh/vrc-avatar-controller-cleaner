@@ -1,5 +1,8 @@
 # Change Log
 
+## Version 1.1.0 05/29/2026
+- Added support to remove animation events
+
 ## Version 1.0.3 05/15/2026
 - Fixed not picked up motion time as well as some other fields in the FX Controller 
 

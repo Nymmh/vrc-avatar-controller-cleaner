@@ -16,11 +16,22 @@ namespace vrc_avatar_controller_cleaner
     {
         private const string ControllerExtention = ".Cleaned.controller";
 
+        public struct CleanOptions
+        {
+            public bool RemoveUnusedParams;
+            public bool RemoveDeadCode;
+            public bool KeepGestureWeights;
+            public bool RemoveUnusedAnimationEvents;
+            public bool RemoveAllAnimationEvents;
+            public bool CopyAnimationFiles;
+        }
+
         public class Result
         {
             public bool Success;
             public string Msg;
             public int Removed;
+            public int RemovedAnimationEvents;
             public List<string> RemovedNamed = new List<string>();
             public List<string> GhostParams = new List<string>();
         }
@@ -463,11 +474,186 @@ namespace vrc_avatar_controller_cleaner
 
         private static readonly string[] GestureWeightParams = new[] { "GestureLeftWeight", "GestureRightWeight" };
 
-        public static Result Run(UnityEditor.Animations.AnimatorController controller, bool removeUnusedParams, bool removeDeadCode, bool keepGestureWeights)
+        private static void GetAnimationsFromMotion(Motion m, HashSet<AnimationClip> clips)
         {
-            if (!removeUnusedParams && !removeDeadCode)
+            if (m == null) return;
+            if (m is AnimationClip clip)
+                clips.Add(clip);
+            else if (m is UnityEditor.Animations.BlendTree bt)
+                foreach (var child in bt.children)
+                    GetAnimationsFromMotion(child.motion, clips);
+        }
+
+        private static void GetAnimationsFromStateMachine(AnimatorStateMachine sm, HashSet<AnimationClip> clips)
+        {
+            foreach (var si in sm.states)
+                if (si.state?.motion != null)
+                    GetAnimationsFromMotion(si.state.motion, clips);
+            foreach (var c in sm.stateMachines)
+                if (c.stateMachine != null)
+                    GetAnimationsFromStateMachine(c.stateMachine, clips);
+        }
+
+        private static int RemoveAnimationEvents(UnityEditor.Animations.AnimatorController controller, bool removeUnused, bool removeAll, bool copyFiles)
+        {
+            if (controller == null) return 0;
+
+            var clips = new HashSet<AnimationClip>();
+            foreach (var layer in controller.layers)
+            {
+                if (layer.stateMachine != null)
+                    GetAnimationsFromStateMachine(layer.stateMachine, clips);
+            }
+
+            var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int removed = 0;
+            foreach (var clip in clips)
+            {
+                if (clip == null) continue;
+                var assetPath = AssetDatabase.GetAssetPath(clip);
+                if (string.IsNullOrEmpty(assetPath) || !assetPath.EndsWith(".anim", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!seenPaths.Add(assetPath)) continue;
+                removed += ProcessAnimFileEvents(assetPath, removeUnused, removeAll, copyFiles);
+            }
+            return removed;
+        }
+
+        // Unity is chud holy shit this is so dumb
+        private static int ProcessAnimFileEvents(string assetPath, bool removeUnused, bool removeAll, bool copyFiles)
+        {
+            var dataPath = Path.Combine(
+                Path.GetDirectoryName(Application.dataPath),
+                assetPath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(dataPath)) return 0;
+            var rawText = File.ReadAllText(dataPath, Encoding.UTF8);
+            var usesCRLF = rawText.Contains("\r\n");
+            var lines = rawText.Replace("\r\n", "\n").Split('\n');
+            var output = new List<string>(lines.Length);
+            int removed = 0;
+            int i = 0;
+
+            while (i < lines.Length)
+            {
+                var line = lines[i];
+                var trimmed = line.TrimEnd();
+
+                if (trimmed.EndsWith("m_Events:") && !trimmed.EndsWith("[]"))
+                {
+                    int eventsIndent = trimmed.Length - "m_Events:".Length;
+                    var entryPrefix = new string(' ', eventsIndent) + "- ";
+                    var contPrefix  = new string(' ', eventsIndent + 2);
+
+                    int peek = i + 1;
+                    while (peek < lines.Length && lines[peek].TrimEnd() == "") peek++;
+
+                    if (peek < lines.Length && lines[peek].StartsWith(entryPrefix))
+                    {
+                        var eventBlocks = new List<(List<string> blockLines, bool hasFunc)>();
+                        int j = i + 1;
+
+                        while (j < lines.Length && (lines[j].StartsWith(entryPrefix) || (lines[j].TrimEnd() == "" && j + 1 < lines.Length && lines[j + 1].StartsWith(entryPrefix))))
+                        {
+                            if (lines[j].TrimEnd() == "") { j++; continue; }
+                            var block = new List<string> { lines[j] };
+                            j++;
+
+                            while (j < lines.Length && lines[j].StartsWith(contPrefix) && !lines[j].StartsWith(entryPrefix))
+                            {
+                                block.Add(lines[j]);
+                                j++;
+                            }
+
+                            // Extract
+                            bool hf = false;
+                            foreach (var bl in block)
+                            {
+                                var t = bl.TrimStart();
+                                if (t.StartsWith("functionName:"))
+                                {
+                                    var val = t.Substring("functionName:".Length).Trim();
+                                    hf = val.Length > 0;
+                                    break;
+                                }
+                            }
+
+                            eventBlocks.Add((block, hf));
+                        }
+
+                        var kept = new List<(List<string>, bool)>();
+
+                        if (removeAll)
+                        {
+                            removed += eventBlocks.Count;
+                        }
+                        else
+                        {
+                            foreach (var eb in eventBlocks)
+                            {
+                                if (removeUnused && !eb.hasFunc)
+                                    removed++;
+                                else
+                                    kept.Add(eb);
+                            }
+                        }
+
+                        if (kept.Count == 0)
+                        {
+                            output.Add(new string(' ', eventsIndent) + "m_Events: []");
+                        }
+                        else
+                        {
+                            output.Add(line);
+                            foreach (var kb in kept)
+                                foreach (var kl in kb.Item1)
+                                    output.Add(kl);
+                        }
+
+                        i = j;
+                        continue;
+                    }
+                }
+
+                output.Add(line);
+                i++;
+            }
+
+            if (removed > 0)
+            {
+                if (copyFiles)
+                {
+                    var backupF = Path.Combine(Path.GetDirectoryName(dataPath), "backup");
+                    Directory.CreateDirectory(backupF);
+                    var backupPath = Path.Combine(backupF, Path.GetFileName(dataPath));
+                    if (!File.Exists(backupPath))
+                        File.Copy(dataPath, backupPath);
+                }
+
+                var sep = usesCRLF ? "\r\n" : "\n";
+                File.WriteAllText(dataPath, string.Join(sep, output), Encoding.UTF8);
+                AssetDatabase.ImportAsset(assetPath);
+            }
+
+            return removed;
+        }
+
+        public static Result Run(UnityEditor.Animations.AnimatorController controller, CleanOptions opts)
+        {
+            if (!opts.RemoveUnusedParams && !opts.RemoveDeadCode && !opts.RemoveUnusedAnimationEvents && !opts.RemoveAllAnimationEvents)
             {
                 return Fail("Select at least one option to clean");
+            }
+
+            int animEventsRemoved = 0;
+            if (opts.RemoveUnusedAnimationEvents || opts.RemoveAllAnimationEvents)
+                animEventsRemoved = RemoveAnimationEvents(controller, opts.RemoveUnusedAnimationEvents, opts.RemoveAllAnimationEvents, opts.CopyAnimationFiles);
+
+            bool removeUnusedParams = opts.RemoveUnusedParams;
+            bool removeDeadCode = opts.RemoveDeadCode;
+            bool keepGestureWeights = opts.KeepGestureWeights;
+
+            if (!removeUnusedParams && !removeDeadCode)
+            {
+                return new Result { Success = true, Removed = 0, RemovedAnimationEvents = animEventsRemoved };
             }
 
             string srcPath = AssetDatabase.GetAssetPath(controller);
@@ -577,15 +763,16 @@ namespace vrc_avatar_controller_cleaner
                 }
             }
 
-            bool anythingChanged = removedNames.Count > 0 || ghostParamList.Count > 0 || hasBrokenRef;
+            bool controllerChanged = removedNames.Count > 0 || ghostParamList.Count > 0 || hasBrokenRef;
 
-            if (!anythingChanged)
+            if (!controllerChanged)
             {
                 AssetDatabase.DeleteAsset(outputAsset);
                 return new Result
                 {
                     Success = true,
-                    Removed = 0
+                    Removed = 0,
+                    RemovedAnimationEvents = animEventsRemoved
                 };
             }
 
@@ -628,7 +815,8 @@ namespace vrc_avatar_controller_cleaner
                 Success = true,
                 Removed = removedNames.Count,
                 RemovedNamed = removedNames,
-                GhostParams = ghostParamList
+                GhostParams = ghostParamList,
+                RemovedAnimationEvents = animEventsRemoved
             };
         }
     }
