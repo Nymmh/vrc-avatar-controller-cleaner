@@ -23,6 +23,9 @@ namespace vrc_avatar_controller_cleaner
         private bool keepGestureWeights = true;
         private bool confirmChangesReq = true;
         private bool applyCleanedControllerToAvatar = true;
+        private bool removeUnusedAnimationEvents = false;
+        private bool removeAllAnimationEvents = false;
+        private bool copyAnimationFiles = true;
         private string cleanResults;
         private Vector2 cleanResultsScroll;
         private CleanController.Result pendingCleanRes;
@@ -96,6 +99,57 @@ namespace vrc_avatar_controller_cleaner
                 EditorGUI.indentLevel--;
             }
             removeDeadCode = EditorGUILayout.ToggleLeft("Remove Dead Code", removeDeadCode);
+            var imScreamingRn = EditorGUILayout.ToggleLeft("Remove Unused Animation Events", removeUnusedAnimationEvents);
+            if (imScreamingRn != removeUnusedAnimationEvents)
+            {
+                if (imScreamingRn)
+                {
+                    if (EditorUtility.DisplayDialog(
+                        "Remove Unused Animation Events",
+                        "This will edit your animations, you will have the option to backup the effected animations.\n\nThis process may take a few minutes to run.",
+                        "OK", "Cancel"))
+                    {
+                        removeUnusedAnimationEvents = true;
+                    }
+                    else
+                    {
+                        removeUnusedAnimationEvents = false;
+                    }
+                }
+                else
+                {
+                    removeUnusedAnimationEvents = false;
+                    removeAllAnimationEvents = false;
+                }
+            }
+            if (removeUnusedAnimationEvents)
+            {
+                EditorGUI.indentLevel++;
+                copyAnimationFiles = EditorGUILayout.ToggleLeft("Copy Animation Files", copyAnimationFiles);
+                var newRemoveAllAnimationEvents = EditorGUILayout.ToggleLeft("Remove All Animation Events", removeAllAnimationEvents);
+                if (newRemoveAllAnimationEvents != removeAllAnimationEvents)
+                {
+                    if (newRemoveAllAnimationEvents)
+                    {
+                        if (EditorUtility.DisplayDialog(
+                            "Remove ALL Animation Events",
+                            "This will remove EVERY animation event from the animations used by this controller.\n\nThis is destructive and cannot be undone without your backups.\n\nAre you sure?",
+                            "Yes, remove all", "Cancel"))
+                        {
+                            removeAllAnimationEvents = true;
+                        }
+                        else
+                        {
+                            removeAllAnimationEvents = false;
+                        }
+                    }
+                    else
+                    {
+                        removeAllAnimationEvents = false;
+                    }
+                }
+                EditorGUI.indentLevel--;
+            }
             applyCleanedControllerToAvatar = EditorGUILayout.ToggleLeft("Apply Cleaned Controller to Avatar", applyCleanedControllerToAvatar);
             GUILayout.Space(10);
 
@@ -103,12 +157,12 @@ namespace vrc_avatar_controller_cleaner
             {
                 EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("Confirm")) ConfirmClean();
-                if (GUILayout.Button("Cancel")) CancelClean();
+                if (GUILayout.Button("Reject")) RejectClean();
                 EditorGUILayout.EndHorizontal();
             }
             else
             {
-                using (new EditorGUI.DisabledScope(!removeUnusedParams && !removeDeadCode))
+                using (new EditorGUI.DisabledScope(!removeUnusedParams && !removeDeadCode && !removeUnusedAnimationEvents))
                 {
                     if (GUILayout.Button("Clean"))
                     {
@@ -185,7 +239,15 @@ namespace vrc_avatar_controller_cleaner
                 return;
             }
 
-            var res = CleanController.Run(fxController, removeUnusedParams, removeDeadCode, keepGestureWeights);
+            var res = CleanController.Run(fxController, new CleanController.CleanOptions
+            {
+                RemoveUnusedParams = removeUnusedParams,
+                RemoveDeadCode = removeDeadCode,
+                KeepGestureWeights = keepGestureWeights,
+                RemoveUnusedAnimationEvents = removeUnusedAnimationEvents,
+                RemoveAllAnimationEvents = removeAllAnimationEvents,
+                CopyAnimationFiles = copyAnimationFiles,
+            });
 
             if (!res.Success)
             {
@@ -193,7 +255,7 @@ namespace vrc_avatar_controller_cleaner
                 return;
             }
 
-            if(res.Removed == 0 && res.GhostParams.Count == 0)
+            if(res.Removed == 0 && res.GhostParams.Count == 0 && res.RemovedAnimationEvents == 0)
             {
                 EditorUtility.DisplayDialog("Nothing to Clean", "There was nothing to be cleaned", "OK");
                 return;
@@ -224,6 +286,12 @@ namespace vrc_avatar_controller_cleaner
                 {
                     sb.AppendLine(" - " + name);
                 }
+            }
+
+            if (res.RemovedAnimationEvents > 0)
+            {
+                if (res.Removed > 0 || res.GhostParams.Count > 0) sb.AppendLine();
+                sb.AppendLine($"Removed {res.RemovedAnimationEvents} unused animation event(s).");
             }
 
             cleanResults = sb.ToString();
@@ -328,6 +396,12 @@ namespace vrc_avatar_controller_cleaner
                 }
             }
 
+            if (res.RemovedAnimationEvents > 0)
+            {
+                if (actuallyRemoved.Count > 0 || res.GhostParams.Count > 0) sb.AppendLine();
+                sb.AppendLine($"Removed {res.RemovedAnimationEvents} unused animation event(s).");
+            }
+
             cleanResults = sb.ToString();
             pendingCleanRes = null;
             parametersToKeep = new HashSet<string>();
@@ -338,6 +412,25 @@ namespace vrc_avatar_controller_cleaner
             }
 
             EditorUtility.DisplayDialog("Clean Complete", "Clean successful", "OK");
+        }
+
+        private void RejectClean()
+        {
+            if (pendingCleanRes == null) return;
+
+            if (parametersToKeep == null)
+            {
+                parametersToKeep = new HashSet<string>();
+            }
+
+            foreach (var name in pendingCleanRes.RemovedNamed)
+            {
+                parametersToKeep.Add(name);
+            }
+
+            pendingCleanRes.Removed = 0;
+            pendingCleanRes.RemovedNamed = new List<string>();
+            ConfirmClean();
         }
 
         // Reset stuff for memory
