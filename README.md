@@ -84,10 +84,9 @@ Then click **Manage** and add **Avatar Controller Cleaner** to your project.
 
 ### Manual
 
-Download it from either my GitHub repo or my Jinxxy store
+Download it from either my GitHub repo
 
 - [Github](https://github.com/Nymmh/vrc-avatar-controller-cleaner/releases)
-- [Jinxxy](https://jinxxy.com/Nymh)
 
 Import the `vrc-avatar-controller-cleaner.dll` and `vrc-avatar-controller-cleaner.pdb` files into your Unity project.
 
