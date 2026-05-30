@@ -1,6 +1,6 @@
 # vrc-avatar-controller-cleaner
 [![Discord](https://img.shields.io/discord/1351240463096615042?style=for-the-badge&logo=discord&logoColor=white&label=Discord&labelColor=%235865F2&color=%23323232)](https://discord.gg/rcCCkbDsY3)
-[![VirusTotal](https://img.shields.io/badge/-VirusTotal-394EFF?style=for-the-badge&logo=virustotal&link=https%3A%2F%2Fwww.virustotal.com%2Fgui%2Ffile%2F7d7cc304ea77622f58b36d308d5904585e04141a97b0b231e402308aaa1234ce)](https://www.virustotal.com/gui/file/7d7cc304ea77622f58b36d308d5904585e04141a97b0b231e402308aaa1234ce)
+[![VirusTotal](https://img.shields.io/badge/-VirusTotal-394EFF?style=for-the-badge&logo=virustotal&link=https%3A%2F%2Fwww.virustotal.com%2Fgui%2Ffile%2F8c5e4cea0aed1fc197c4348fcf5e6bbfd8e5dd713cec64d462b985f248eb12d6)](https://www.virustotal.com/gui/file/8c5e4cea0aed1fc197c4348fcf5e6bbfd8e5dd713cec64d462b985f248eb12d6?nocache=1)
 
 A Unity tool that can remove unused parameters as well as dead code that exists in your avatars FX Controller, generating a new cleaned FX controller for you and leaving the original FX controller untouched
 
@@ -10,6 +10,7 @@ If you have ever seen the Unity Error: `Local file identifier (xxxxxxxx) doesn't
 
 - Remove unused parameters from the controller
 - Remove dead code Unity failed to clean up
+- Remove unused animation events & used ones
 - Preserve Gesture Weight parameters if desired
 - Preview and confirm parameter removals before cleaning
 - Automatically apply the cleaned FX Controller to the avatar
@@ -32,6 +33,18 @@ Shows a list of staged parameter removals and allows you to keep selected parame
 ### Remove Dead Code
 
 Removes dead code from the controller that Unity did not remove
+
+### Remove Unused Animation Events
+
+Removes unused animation events from animations that are used by the controller, this is a destructive edit so theres an option to copy the edited animation files. Depending on the amount of animations in your controller this could take a few minutes to process.
+
+### Copy Animation Files
+
+Copies the edited animation files to a "backup" folder
+
+### Remove All Animation Events
+
+Removes all animation events from animations that are used by the controller, this is a destructive edit. Depending on the amount of animations in your controller this could take a few minutes to process.
 
 ### Apply Cleaned Controller To Avatar
 
