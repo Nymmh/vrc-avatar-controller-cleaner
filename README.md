@@ -123,6 +123,10 @@ You can, however results might be unexpected
 2. Replace the FX Controller with the prefab controller you wish to clean
 3. Uncheck **Apply Cleaned Controller To Avatar**
 4. Click **Clean**
+5. Click the Prefab in the hierarchy
+6. Open in Prefab
+7. Replace the FX Controller with the cleaned one
+8. Save the Prefab
 
 ### Where is the cleaned controller saved?
 

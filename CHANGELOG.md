@@ -1,5 +1,9 @@
 # Change Log
 
+## Version 1.1.1 06/09/2026
+- Updated README
+- Bumped version because I released the wrong package :teehee:
+
 ## Version 1.1.0 05/29/2026
 - Added support to remove animation events
 
